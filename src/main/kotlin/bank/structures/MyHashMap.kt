@@ -1,13 +1,15 @@
 package bank.structures
 
 class MyHashMap<K, V>(startCapacity: Int = 16) {
+    private var capacity = startCapacity
     init {
-        require(startCapacity > 0 && (startCapacity and (startCapacity-1) == 0)) {"вместимость должна быть степенью двойки"}
+        require(capacity > 0)
+        capacity = if (startCapacity > 1) (startCapacity-1).takeHighestOneBit() shl 1 else 1
     }
     private class Node<K, V>(val key: K, var value: V) {
         var next: Node<K, V>? = null
     }
-    private var capacity = startCapacity
+
     private var count = 0
     private val loadFactor = 0.75
     private var buckets = arrayOfNulls<Node<K, V>?>(capacity)
