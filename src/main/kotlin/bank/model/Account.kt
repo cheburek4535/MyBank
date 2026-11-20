@@ -1,6 +1,6 @@
 package bank.model
 
-class Account private constructor(val id: String, val owner: String, var initBalance: Long = 0L) {
+class Account private constructor(val id: String, val owner: String, initBalance: Long = 0L) {
     var balance: Long = initBalance
         private set
 
@@ -34,7 +34,7 @@ class Account private constructor(val id: String, val owner: String, var initBal
     fun withdraw(amount: Long): Long {
         require(amount > 0) {"сумма списания должна быть положительной"}
         require(balance >= amount) {"сумма списания не может быть больше баланса"}
-        balance += amount
+        balance -= amount
         return balance
     }
 
