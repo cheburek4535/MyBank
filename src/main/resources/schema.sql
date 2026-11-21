@@ -2,6 +2,7 @@ create table if not exists accounts (
     id varchar(255) primary key,
     owner text not null,
     balance bigint not null default 0 check (balance >= 0),
+    status varchar(20) not null default 'OPEN' check (status in ('OPEN', 'CLOSED', 'FROZEN'))
     created_at timestamptz not null default now()
 );
 create table if not exists transactions (

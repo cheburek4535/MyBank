@@ -73,4 +73,7 @@ class AccountRepository(
             rs, _ -> rs.getString("id")
         }.list()
     }
+    fun delete(id: String): Boolean {
+        return jdbcClient.sql("delete from accounts where id = :id").param("id", id).update() > 0
+    }
 }

@@ -18,5 +18,6 @@ data class DeleteAccountRequest(
 data class AccountResponse(
     val id: String,
     val balance: Long,
-    val owner: String
+    val owner: String,
+    val status: String
 )

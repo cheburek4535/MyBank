@@ -4,7 +4,7 @@ class Account private constructor(val id: String, val owner: String, initBalance
     var balance: Long = initBalance
         private set
 
-
+    var status: AccountStatus = AccountStatus.OPEN
     override fun equals(other: Any?): Boolean {
         if (other === this) return true
         if (other !is Account) return false
@@ -37,7 +37,7 @@ class Account private constructor(val id: String, val owner: String, initBalance
         balance -= amount
         return balance
     }
-
-
 }
+
+enum class AccountStatus {OPEN, CLOSED, FROZEN}
 
