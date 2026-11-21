@@ -1,5 +1,8 @@
 package bank.structures
 
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
+
 class LRUCache<K, V>(val capacity: Int) {
     private class Node<K, V>(val key: K?, var value: V?) {
         var prev: Node<K, V>? = null
@@ -16,9 +19,14 @@ class LRUCache<K, V>(val capacity: Int) {
         tail.prev = head
     }
 
+    private val lock = ReentrantLock()
+
     private fun unlinkNode(node: Node<K, V>) {
         node.prev?.next = node.next
         node.next?.prev = node.prev
+
+        node.next = null
+        node.prev = null
     }
 
     private fun addToHead(node: Node<K, V>) {
@@ -40,13 +48,13 @@ class LRUCache<K, V>(val capacity: Int) {
         count--
     }
 
-    fun get(key: K): V? {
+    fun get(key: K): V? = lock.withLock {
         val node = map.get(key) ?: return null
         moveToHead(node)
         return node.value
     }
 
-    fun put(key: K, value: V) {
+    fun put(key: K, value: V): Unit = lock.withLock {
         val existNode = map.get(key)
         if (existNode != null) {
             existNode.value = value
@@ -62,7 +70,7 @@ class LRUCache<K, V>(val capacity: Int) {
         count++
     }
 
-    fun remove(key: K) {
+    fun remove(key: K): Unit = lock.withLock{
         val node = map.get(key) ?: return
         deleteNode(node)
     }

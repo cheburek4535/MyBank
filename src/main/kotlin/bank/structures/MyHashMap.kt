@@ -1,5 +1,9 @@
 package bank.structures
 
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
+
 class MyHashMap<K, V>(startCapacity: Int = 16) {
     private var capacity = startCapacity
     init {
@@ -13,6 +17,8 @@ class MyHashMap<K, V>(startCapacity: Int = 16) {
     private var count = 0
     private val loadFactor = 0.75
     private var buckets = arrayOfNulls<Node<K, V>?>(capacity)
+
+    private val lock = ReentrantReadWriteLock()
 
     private fun calculateIndex(key: K): Int {
         val hash = key.hashCode()
@@ -54,13 +60,13 @@ class MyHashMap<K, V>(startCapacity: Int = 16) {
         buckets = newArray
     }
 
-    fun put(key: K, value: V) {
+    fun put(key: K, value: V) = lock.write {
         if (add(key, value, buckets)) {
             count++
             if (count.toDouble() / capacity >= loadFactor) resize()
         }
     }
-    fun get(key: K): V? {
+    fun get(key: K): V? = lock.read {
         val index = calculateIndex(key)
         var currNode = buckets[index]
         while (currNode != null) {
@@ -69,7 +75,7 @@ class MyHashMap<K, V>(startCapacity: Int = 16) {
         }
         return null
     }
-    fun remove(key: K) {
+    fun remove(key: K): Unit = lock.write {
         val index = calculateIndex(key)
         var currNode = buckets[index]
         var prev: Node<K, V>? = null
