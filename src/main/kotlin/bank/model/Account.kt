@@ -5,6 +5,8 @@ class Account private constructor(val id: String, val owner: String, initBalance
         private set
 
     var status: AccountStatus = AccountStatus.OPEN
+    private set
+
     override fun equals(other: Any?): Boolean {
         if (other === this) return true
         if (other !is Account) return false
@@ -25,18 +27,10 @@ class Account private constructor(val id: String, val owner: String, initBalance
             return Account(id, owner, balance)
         }
     }
-    fun deposit(amount: Long): Long {
-        require(amount > 0) {"сумма пополнения должна быть положительной"}
-        require(MAX_BALANCE - balance >= amount)
-        balance += amount
-        return balance
+    fun close() {
+        status = AccountStatus.CLOSED
     }
-    fun withdraw(amount: Long): Long {
-        require(amount > 0) {"сумма списания должна быть положительной"}
-        require(balance >= amount) {"сумма списания не может быть больше баланса"}
-        balance -= amount
-        return balance
-    }
+
 }
 
 enum class AccountStatus {OPEN, CLOSED, FROZEN}

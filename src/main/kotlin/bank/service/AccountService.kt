@@ -17,7 +17,7 @@ class AccountService(private val accountRepository: AccountRepository) {
     private val lruCache = LRUCache<String, Account>(10000)
 
     @EventListener(ApplicationReadyEvent::class)
-    private fun prepareBloomFilter() = accountRepository.getAllIds().forEach { bloomFilter.set(it) }
+    fun prepareBloomFilter() = accountRepository.getAllIds().forEach { bloomFilter.set(it) }
 
     fun create(request: CreateAccountRequest): Account {
         val id = UUID.randomUUID().toString()
@@ -36,14 +36,14 @@ class AccountService(private val accountRepository: AccountRepository) {
         }
         return fromDb
     }
-    fun delete(id: String): Boolean {
-        val account = get(id)
-        if (account == null) return false
+    fun close(id: String): Boolean {
+        get(id) ?: return false
         lruCache.remove(id)
-        account.status = AccountStatus.CLOSED
+        accountRepository.closeAccount(id)
         return true
 
     }
     fun invalidateCache(id: String) = lruCache.remove(id)
+    fun mightExists(id: String): Boolean = bloomFilter.mightContain(id)
 
 }

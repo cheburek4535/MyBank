@@ -34,7 +34,7 @@ class AccountRepository(
             """
                 update accounts
                 set balance = balance + :amount
-                where id = :id and :maxBal - :amount >= balance
+                where id = :id and :maxBal - :amount >= balance and status = 'OPEN'
                 returning balance
             """.trimIndent()
         )
@@ -49,7 +49,7 @@ class AccountRepository(
             """
                 update accounts
                 set balance = balance - :amount
-                where id = :id and balance >= :amount
+                where id = :id and balance >= :amount and status = 'OPEN'
                 returning balance
             """.trimIndent()
         )
@@ -76,4 +76,5 @@ class AccountRepository(
     fun delete(id: String): Boolean {
         return jdbcClient.sql("delete from accounts where id = :id").param("id", id).update() > 0
     }
+    fun closeAccount(id: String) = jdbcClient.sql("update accounts set status = 'CLOSED' where id = :id").param("id", id).update()
 }

@@ -4,6 +4,7 @@ data class Transaction(
     val id: String,
     val type: TransactionType,
     val amount: Long,
+    val balanceAfter: Long,
     val idempotencyKey: String,
     val senderId: String? = null,
     val recipientId: String? = null,

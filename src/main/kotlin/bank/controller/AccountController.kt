@@ -29,10 +29,10 @@ class AccountController(private val accountService: AccountService) {
         return ResponseEntity.ok(AccountResponse(account.id, account.balance, account.owner, account.status.name))
     }
     @DeleteMapping("/{id}")
-    fun deleteAccount(@PathVariable id: String): ResponseEntity<StandardResponse> {
-        val success = accountService.delete(id)
+    fun closeAccount(@PathVariable id: String): ResponseEntity<StandardResponse> {
+        val success = accountService.close(id)
         if (!success) return ResponseEntity.notFound().build()
-        return ResponseEntity.ok().body(StandardResponse("Аккаунт $id удален успешно"))
+        return ResponseEntity.ok().body(StandardResponse("Счет $id удален успешно"))
     }
 
 }

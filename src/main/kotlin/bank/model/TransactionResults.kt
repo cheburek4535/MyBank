@@ -1,8 +1,9 @@
 package bank.model
 
-sealed interface DepositResult
-sealed interface WithdrawResult
-sealed interface TransferResult
+sealed interface TransactionResult
+sealed interface DepositResult : TransactionResult
+sealed interface WithdrawResult : TransactionResult
+sealed interface TransferResult : TransactionResult
 
 data class AccountNotFound(val accountId: String) : DepositResult, WithdrawResult, TransferResult
 data class InvalidAmount(val amount: Long) : DepositResult, WithdrawResult, TransferResult
@@ -15,3 +16,5 @@ data class WithdrawSuccess(val newBalance: Long, val amount: Long, val accountId
 data class TransferSuccess(val newSenderBalance: Long, val amount: Long, val senderAccountId: String, val recipientAccountId: String, val transactionId: String) : TransferResult
 
 data class SameAccount(val accountId: String): TransferResult
+
+data class IdempotencyConflict(val key: String): TransferResult, DepositResult, WithdrawResult

@@ -2,7 +2,7 @@ create table if not exists accounts (
     id varchar(255) primary key,
     owner text not null,
     balance bigint not null default 0 check (balance >= 0),
-    status varchar(20) not null default 'OPEN' check (status in ('OPEN', 'CLOSED', 'FROZEN'))
+    status varchar(20) not null default 'OPEN' check (status in ('OPEN', 'CLOSED', 'FROZEN')),
     created_at timestamptz not null default now()
 );
 create table if not exists transactions (
@@ -10,6 +10,7 @@ create table if not exists transactions (
     type varchar(20) not null check (type in ('TRANSFER', 'DEPOSIT', 'WITHDRAW')),
     idempotency_key varchar(255) not null unique,
     amount bigint not null check ( amount > 0 ),
+    balance_after bigint not null check (balance_after >= 0),
     sender_account_id varchar(255) references accounts(id),
     recipient_account_id varchar(255) references accounts(id),
     status varchar(20) not null default 'SUCCESS' check (status in ('SUCCESS', 'FAILED')),
