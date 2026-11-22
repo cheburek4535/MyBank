@@ -16,7 +16,7 @@ import java.util.UUID
 class TransactionService(private val accountService: AccountService, private val txRepository: TransactionRepository,
     private val accountRepository: AccountRepository, private val txTemplate: TransactionTemplate) {
 
-    private data class CachedEntry(val request: Any, var result: TransactionResult)
+    private data class CachedEntry(val request: Any, val result: TransactionResult)
 
     private val idempotencyCache = MyHashMap<String, CachedEntry>()
 
@@ -41,30 +41,35 @@ class TransactionService(private val accountService: AccountService, private val
         if (recipientId == senderId) return SameAccount(recipientId)
         if (amount <= 0) return InvalidAmount(amount)
 
-        val senderAccount = accountService.get(senderId) ?: return AccountNotFound(senderId)
-
         txRepository.findByIdempotencyKey(key)?.let {existing ->
-            return TransferSuccess(
-                existing.balanceAfter,
-                existing.amount,
-                senderId,
-                recipientId,
-                existing.id
-            ).also { idempotencyCache.put(key, CachedEntry(request, it)) }
+            return if (existing.type == TransactionType.TRANSFER && existing.senderId == senderId && existing.recipientId == recipientId && existing.amount == amount) {
+                TransferSuccess(
+                    existing.balanceAfter,
+                    existing.amount,
+                    senderId,
+                    recipientId,
+                    existing.id
+                ).also { idempotencyCache.put(key, CachedEntry(request, it)) }
+            } else {
+                IdempotencyConflict(key)
+            }
         }
+
         if (!accountService.mightExists(recipientId)) return AccountNotFound(recipientId)
+        if(!accountService.mightExists(senderId)) return AccountNotFound(senderId)
 
         val result: TransferResult = try {
             txTemplate.execute { status ->
                 val newSenderBalance = accountRepository.decreaseBalance(senderId, amount) ?: run {
                     status.setRollbackOnly()
-                    if (accountRepository.findById(senderId) == null) return@execute AccountNotFound(senderId)
+                    val senderAccount = accountRepository.findById(senderId)
+                    if (senderAccount == null || senderAccount.status != AccountStatus.OPEN) return@execute AccountNotFound(senderId)
                     else return@execute NotEnoughMoney(senderAccount.balance, amount)
                 }
                 accountRepository.increaseBalance(recipientId, amount) ?: run {
                     status.setRollbackOnly()
-                    val existingAccount = accountRepository.findById(recipientId)
-                    if (existingAccount == null) return@execute AccountNotFound(recipientId)
+                    val recipientAccount = accountRepository.findById(recipientId)
+                    if (recipientAccount == null || recipientAccount.status != AccountStatus.OPEN) return@execute AccountNotFound(recipientId)
                     else return@execute BalanceOverflow(amount, recipientId)
 
                 }
