@@ -10,7 +10,7 @@ class LRUCache<K: Any, V: Any>(val capacity: Int) {
     }
     private val head = Node<K, V>(null, null)
     private val tail = Node<K, V>(null, null)
-    private val map = MyHashMap<K, Node<K, V>>()
+    private val map = MyHashMap<K, Node<K, V>>(capacity)
     private var count = 0
 
     init {

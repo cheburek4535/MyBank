@@ -11,7 +11,7 @@ class TransactionRepository(private val jdbcClient: JdbcClient) {
     fun save(tx: Transaction) {
         jdbcClient.sql("""
             insert into transactions (id, type, amount, balance_after, idempotency_key, sender_account_id, recipient_account_id, status)
-            values (:id, :type, :amount, :balanceAfter, :idempotency_key, :sender_account_id, :recipient_account_id, :status)
+            values (:id, :type, :amount, :balance_after, :idempotency_key, :sender_account_id, :recipient_account_id, :status)
             """.trimIndent()
         )
             .param("id", tx.id)
@@ -32,7 +32,7 @@ class TransactionRepository(private val jdbcClient: JdbcClient) {
                     id = rs.getString("id"),
                     type = TransactionType.valueOf(rs.getString("type")),
                     amount = rs.getLong("amount"),
-                    balanceAfter = rs.getLong("balanceAfter"),
+                    balanceAfter = rs.getLong("balance_after"),
                     idempotencyKey = rs.getString("idempotency_key"),
                     senderId = rs.getString("sender_account_id"),
                     recipientId = rs.getString("recipient_account_id"),
