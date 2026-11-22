@@ -4,7 +4,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
-class MyHashMap<K, V>(startCapacity: Int = 16) {
+class MyHashMap<K: Any, V: Any>(startCapacity: Int = 16) {
     private var capacity = startCapacity
     init {
         require(capacity > 0)

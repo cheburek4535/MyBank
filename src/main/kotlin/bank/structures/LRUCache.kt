@@ -3,7 +3,7 @@ package bank.structures
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-class LRUCache<K, V>(val capacity: Int) {
+class LRUCache<K: Any, V: Any>(val capacity: Int) {
     private class Node<K, V>(val key: K?, var value: V?) {
         var prev: Node<K, V>? = null
         var next: Node<K, V>? = null

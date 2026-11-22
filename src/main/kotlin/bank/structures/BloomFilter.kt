@@ -4,7 +4,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
-class BloomFilter<T>(val capacity: Int, val hashFuncs: Int = 3) {
+class BloomFilter<T: Any>(val capacity: Int, val hashFuncs: Int = 3) {
     init {
         require(capacity > 0)
         require(hashFuncs > 0)
