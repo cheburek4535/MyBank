@@ -17,12 +17,34 @@ class TransactionService(private val accountService: AccountService, private val
     private val accountRepository: AccountRepository, private val txTemplate: TransactionTemplate) {
 
     private data class CachedEntry(val request: Any, val result: TransactionResult)
-
     private val idempotencyCache = MyHashMap<String, CachedEntry>()
 
-    fun deposit(key: String, request: DepositRequest) {}
-    fun withdraw(key: String, request: WithdrawRequest) {}
+    private fun generateId(): String = UUID.randomUUID().toString()
 
+    fun deposit(key: String, request: DepositRequest): DepositResult {
+        findIdempotentDeposit(key, request)?.let {return it}
+        if (request.amount <= 0) return InvalidAmount(request.amount)
+        if (!accountService.mightExists(request.accountId)) return AccountNotFound(request.accountId)
+
+        val result = executeDeposit(request, key)
+        if (result is DepositSuccess) {
+            accountService.invalidateCache(request.accountId)
+            idempotencyCache.put(key, CachedEntry(request, result))
+        }
+        return result
+    }
+    fun withdraw(key: String, request: WithdrawRequest): WithdrawResult {
+        findIdempotentWithdraw(key, request)?.let {return it}
+        if (request.amount <= 0) return InvalidAmount(request.amount)
+        if (!accountService.mightExists(request.accountId)) return AccountNotFound(request.accountId)
+
+        val result = executeWithdraw(request, key)
+        if (result is WithdrawSuccess) {
+            accountService.invalidateCache(result.accountId)
+            idempotencyCache.put(key, CachedEntry(request, result))
+        }
+        return result
+    }
     fun transfer(key: String, request: TransferRequest): TransferResult {
         findIdempotentTransfer(key, request)?.let {return it}
 
@@ -53,43 +75,78 @@ class TransactionService(private val accountService: AccountService, private val
             IdempotencyConflict(saved.idempotencyKey)
         }
     }
+    private fun matchSavedDeposit(saved: Transaction, request: DepositRequest): DepositResult {
+        return if (saved.type == TransactionType.DEPOSIT && saved.recipientId == request.accountId && saved.amount == request.amount) {
+            DepositSuccess(saved.balanceAfter, saved.amount, request.accountId)
+        } else {
+            IdempotencyConflict(saved.idempotencyKey)
+        }
+    }
+    private fun matchSavedWithdraw(saved: Transaction, request: WithdrawRequest): WithdrawResult {
+        return if (saved.type == TransactionType.WITHDRAW && saved.senderId == request.accountId && saved.amount == request.amount) {
+            WithdrawSuccess(saved.balanceAfter, saved.amount, request.accountId)
+        } else {
+            IdempotencyConflict(saved.idempotencyKey)
+        }
+    }
+
     private fun findIdempotentTransfer(key: String, request: TransferRequest): TransferResult? {
-        when (val existing = idempotencyCache.get(key)) {
-            null -> Unit
-            else -> {
-                if (existing.request != request) return IdempotencyConflict(key)
-                return when (val res = existing.result) {
-                    is TransferResult -> res
-                    is DepositSuccess, is WithdrawSuccess -> IdempotencyConflict(key)
-                }
+        idempotencyCache.get(key)?.let {existing ->
+            if (existing.request != request) return IdempotencyConflict(key)
+            return when (val res = existing.result) {
+                is TransferResult -> res
+                else-> IdempotencyConflict(key)
+            }
+        }
+
+        val saved = txRepository.findByIdempotencyKey(key) ?: return null
+        return matchSavedTransfer(saved, request).also { if (it !is IdempotencyConflict) idempotencyCache.put(key, CachedEntry(request, it))}
+    }
+    private fun findIdempotentDeposit(key: String, request: DepositRequest): DepositResult? {
+        idempotencyCache.get(key)?.let {existing ->
+            if (existing.request != request) return IdempotencyConflict(key)
+            return when (val res = existing.result) {
+                is DepositResult ->  res
+                else -> IdempotencyConflict(key)
             }
         }
         val saved = txRepository.findByIdempotencyKey(key) ?: return null
-        return matchSavedTransfer(saved, request).also { if (it !is IdempotencyConflict) idempotencyCache.put(key, CachedEntry(request, it))}
+        return matchSavedDeposit(saved, request).also { if (it !is IdempotencyConflict) idempotencyCache.put(key, CachedEntry(request, it))}
+    }
+    private fun findIdempotentWithdraw(key: String, request: WithdrawRequest): WithdrawResult? {
+        idempotencyCache.get(key)?.let {existing ->
+            if (existing.request != request) return IdempotencyConflict(key)
+            return when (val res = existing.result) {
+                is WithdrawResult ->  res
+                else -> IdempotencyConflict(key)
+            }
+        }
+
+        val saved = txRepository.findByIdempotencyKey(key) ?: return null
+        return matchSavedWithdraw(saved, request).also { if (it !is IdempotencyConflict) idempotencyCache.put(key, CachedEntry(request, it))}
     }
     private fun executeTransfer(request: TransferRequest, key: String): TransferResult {
         val senderId = request.senderAccountId
         val amount = request.amount
         val recipientId = request.recipientAccountId
 
-        val result: TransferResult = try {
+        return try {
             txTemplate.execute { status ->
                 val newSenderBalance = accountRepository.decreaseBalance(senderId, amount) ?: run {
                     status.setRollbackOnly()
                     val senderAccount = accountRepository.findById(senderId)
-                    if (senderAccount == null || senderAccount.status != AccountStatus.OPEN) return@execute AccountNotFound(senderId)
-                    else return@execute NotEnoughMoney(senderAccount.balance, amount)
+                    return@execute if (senderAccount == null || senderAccount.status != AccountStatus.OPEN) AccountNotFound(senderId)
+                    else NotEnoughMoney(senderAccount.balance, amount)
                 }
                 accountRepository.increaseBalance(recipientId, amount) ?: run {
                     status.setRollbackOnly()
                     val recipientAccount = accountRepository.findById(recipientId)
-                    if (recipientAccount == null || recipientAccount.status != AccountStatus.OPEN) return@execute AccountNotFound(recipientId)
-                    else return@execute BalanceOverflow(amount, recipientId)
+                    return@execute if (recipientAccount == null || recipientAccount.status != AccountStatus.OPEN) AccountNotFound(recipientId)
+                    else BalanceOverflow(amount, recipientId)
 
                 }
-
                 val tx = Transaction(
-                    UUID.randomUUID().toString(),
+                    generateId(),
                     TransactionType.TRANSFER,
                     amount,
                     newSenderBalance,
@@ -105,6 +162,58 @@ class TransactionService(private val accountService: AccountService, private val
             val saved = txRepository.findByIdempotencyKey(key) ?: throw IllegalStateException("Ключ идемпотентности $key повторился но не найден в бд", e)
             matchSavedTransfer(saved, request)
         }
-        return result
     }
+    private fun executeDeposit(request: DepositRequest, key: String): DepositResult {
+        return try {
+            txTemplate.execute { status ->
+                val newBalance = accountRepository.increaseBalance(request.accountId, request.amount) ?: run {
+                    status.setRollbackOnly()
+                    val account = accountRepository.findById(request.accountId)
+                    return@execute if (account == null || account.status != AccountStatus.OPEN) AccountNotFound(request.accountId)
+                    else BalanceOverflow(request.amount, request.accountId)
+                }
+                val tx = Transaction(
+                    generateId(),
+                    TransactionType.DEPOSIT,
+                    request.amount,
+                    newBalance,
+                    key,
+                    null,
+                    request.accountId
+                )
+                txRepository.save(tx)
+                DepositSuccess(newBalance, request.amount, request.accountId)
+            }
+        } catch (e: DuplicateKeyException) {
+            val saved = txRepository.findByIdempotencyKey(key) ?: throw IllegalStateException("Ключ идемпотентности повторился но не найден в БД", e)
+            matchSavedDeposit(saved, request)
+        }
+    }
+    private fun executeWithdraw(request: WithdrawRequest, key: String): WithdrawResult {
+        return try {
+            txTemplate.execute { status ->
+                val newBalance = accountRepository.decreaseBalance(request.accountId, request.amount) ?: run {
+                    status.setRollbackOnly()
+                    val account = accountRepository.findById(request.accountId)
+                    return@execute if (account == null || account.status != AccountStatus.OPEN) AccountNotFound(request.accountId)
+                    else NotEnoughMoney(account.balance, request.amount)
+                }
+                val tx = Transaction(
+                    generateId(),
+                    TransactionType.WITHDRAW,
+                    request.amount,
+                    newBalance,
+                    key,
+                    request.accountId,
+                    null
+                )
+                txRepository.save(tx)
+                WithdrawSuccess(newBalance, request.amount, request.accountId)
+            }
+        } catch (e: DuplicateKeyException) {
+            val saved = txRepository.findByIdempotencyKey(key) ?: throw IllegalStateException("ключ идемпотентности повторился но не найден в БД", e)
+            matchSavedWithdraw(saved, request)
+        }
+    }
+
 }
