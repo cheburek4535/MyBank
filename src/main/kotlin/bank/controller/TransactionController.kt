@@ -30,6 +30,7 @@ class TransactionController(private val txService: TransactionService) {
             is SameAccount -> ResponseEntity.badRequest().body(ErrorResponse("Нельзя переводить деньги самому себе"))
             is BalanceOverflow -> ResponseEntity.status(HttpStatus.CONFLICT).body(ErrorResponse("Счет получателя переполнится"))
             is AccountNotFound -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorResponse("Счет ${result.accountId} не найден"))
+            is IdempotencyConflict -> ResponseEntity.status(HttpStatus.CONFLICT).body(ErrorResponse("Ключ идемпотентности ${result.key} конфликтует с другим запросом"))
         }
     }
 }

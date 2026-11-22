@@ -8,6 +8,7 @@ class MyHashMap<K: Any, V: Any>(startCapacity: Int = 16) {
     private var capacity = startCapacity
     init {
         require(capacity > 0)
+        require(capacity <= (1 shl 30))
         capacity = if (startCapacity > 1) (startCapacity-1).takeHighestOneBit() shl 1 else 1
     }
     private class Node<K, V>(val key: K, var value: V) {
@@ -63,7 +64,7 @@ class MyHashMap<K: Any, V: Any>(startCapacity: Int = 16) {
     fun put(key: K, value: V) = lock.write {
         if (add(key, value, buckets)) {
             count++
-            if (count.toDouble() / capacity >= loadFactor) resize()
+            if (capacity < (1 shl 30) && count.toDouble() / capacity >= loadFactor) resize()
         }
     }
     fun get(key: K): V? = lock.read {

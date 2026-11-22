@@ -37,11 +37,8 @@ class AccountService(private val accountRepository: AccountRepository) {
         return fromDb
     }
     fun close(id: String): Boolean {
-        get(id) ?: return false
-        lruCache.remove(id)
-        accountRepository.closeAccount(id)
-        return true
-
+        return accountRepository.closeAccount(id) > 0
+            .also { invalidateCache(id) }
     }
     fun invalidateCache(id: String) = lruCache.remove(id)
     fun mightExists(id: String): Boolean = bloomFilter.mightContain(id)

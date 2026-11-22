@@ -24,6 +24,36 @@ class TransactionService(private val accountService: AccountService, private val
     fun withdraw(key: String, request: WithdrawRequest) {}
 
     fun transfer(key: String, request: TransferRequest): TransferResult {
+        findIdempotentTransfer(key, request)?.let {return it}
+
+        val senderId = request.senderAccountId
+        val recipientId = request.recipientAccountId
+        val amount = request.amount
+
+        if (recipientId == senderId) return SameAccount(recipientId)
+        if (amount <= 0) return InvalidAmount(amount)
+        if (!accountService.mightExists(recipientId)) return AccountNotFound(recipientId)
+        if(!accountService.mightExists(senderId)) return AccountNotFound(senderId)
+
+        val result = executeTransfer(request, key)
+
+        if (result is TransferSuccess) {
+            accountService.invalidateCache(recipientId)
+            accountService.invalidateCache(senderId)
+            idempotencyCache.put(key, CachedEntry(request, result))
+        }
+        return result
+    }
+
+
+    private fun matchSavedTransfer(saved: Transaction, request: TransferRequest): TransferResult {
+        return if (saved.type == TransactionType.TRANSFER && saved.amount == request.amount && saved.senderId == request.senderAccountId && saved.recipientId == request.recipientAccountId) {
+            TransferSuccess(saved.balanceAfter, saved.amount, saved.senderId, saved.recipientId, saved.id)
+        } else {
+            IdempotencyConflict(saved.idempotencyKey)
+        }
+    }
+    private fun findIdempotentTransfer(key: String, request: TransferRequest): TransferResult? {
         when (val existing = idempotencyCache.get(key)) {
             null -> Unit
             else -> {
@@ -34,29 +64,13 @@ class TransactionService(private val accountService: AccountService, private val
                 }
             }
         }
-
+        val saved = txRepository.findByIdempotencyKey(key) ?: return null
+        return matchSavedTransfer(saved, request).also { if (it !is IdempotencyConflict) idempotencyCache.put(key, CachedEntry(request, it))}
+    }
+    private fun executeTransfer(request: TransferRequest, key: String): TransferResult {
         val senderId = request.senderAccountId
-        val recipientId = request.recipientAccountId
         val amount = request.amount
-        if (recipientId == senderId) return SameAccount(recipientId)
-        if (amount <= 0) return InvalidAmount(amount)
-
-        txRepository.findByIdempotencyKey(key)?.let {existing ->
-            return if (existing.type == TransactionType.TRANSFER && existing.senderId == senderId && existing.recipientId == recipientId && existing.amount == amount) {
-                TransferSuccess(
-                    existing.balanceAfter,
-                    existing.amount,
-                    senderId,
-                    recipientId,
-                    existing.id
-                ).also { idempotencyCache.put(key, CachedEntry(request, it)) }
-            } else {
-                IdempotencyConflict(key)
-            }
-        }
-
-        if (!accountService.mightExists(recipientId)) return AccountNotFound(recipientId)
-        if(!accountService.mightExists(senderId)) return AccountNotFound(senderId)
+        val recipientId = request.recipientAccountId
 
         val result: TransferResult = try {
             txTemplate.execute { status ->
@@ -89,17 +103,8 @@ class TransactionService(private val accountService: AccountService, private val
             }
         } catch (e: DuplicateKeyException) {
             val saved = txRepository.findByIdempotencyKey(key) ?: throw IllegalStateException("Ключ идемпотентности $key повторился но не найден в бд", e)
-            if (saved.type == TransactionType.TRANSFER && saved.amount == amount && saved.senderId == senderId && saved.recipientId == recipientId) {
-                TransferSuccess(saved.balanceAfter, saved.amount, senderId, recipientId, saved.id)
-            } else {
-                IdempotencyConflict(key)
-            }
-        }
-        if (result is TransferSuccess) {
-            accountService.invalidateCache(recipientId)
-            accountService.invalidateCache(senderId)
-            idempotencyCache.put(key, CachedEntry(request, result))
+            matchSavedTransfer(saved, request)
         }
         return result
-      }
+    }
 }

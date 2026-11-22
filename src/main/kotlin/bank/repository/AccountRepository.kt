@@ -1,6 +1,7 @@
 package bank.repository
 
 import bank.model.Account
+import bank.model.AccountStatus
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.stereotype.Repository
 
@@ -16,13 +17,14 @@ class AccountRepository(
             .update()
     }
     fun findById(id: String): Account? {
-        return jdbcClient.sql("select id, owner, balance from accounts where id = :id")
+        return jdbcClient.sql("select id, owner, balance, status from accounts where id = :id")
             .param("id", id)
             .query {rs, _ ->
                 Account.create(
                     id = rs.getString("id"),
                     balance = rs.getLong("balance"),
-                    owner = rs.getString("owner")
+                    owner = rs.getString("owner"),
+                    status = AccountStatus.valueOf(rs.getString("status"))
                 )
             }
             .optional()

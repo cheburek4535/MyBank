@@ -1,10 +1,10 @@
 package bank.model
 
-class Account private constructor(val id: String, val owner: String, initBalance: Long = 0L) {
+class Account private constructor(val id: String, val owner: String, initBalance: Long = 0L, initStatus: AccountStatus = AccountStatus.OPEN) {
     var balance: Long = initBalance
         private set
 
-    var status: AccountStatus = AccountStatus.OPEN
+    var status: AccountStatus = initStatus
     private set
 
     override fun equals(other: Any?): Boolean {
@@ -20,11 +20,11 @@ class Account private constructor(val id: String, val owner: String, initBalance
         const val MIN_BALANCE = 0L
         const val MAX_BALANCE = Long.MAX_VALUE
 
-        fun create(id: String, owner: String, balance: Long = 0L): Account {
+        fun create(id: String, owner: String, balance: Long = 0L, status: AccountStatus = AccountStatus.OPEN): Account {
             require(id.isNotBlank()) {"id должен быть непустым"}
             require(owner.isNotBlank()) {"owner не должен быть пустым"}
             require(balance in MIN_BALANCE..MAX_BALANCE) {"баланс должен быть в пределах мин и макс значений"}
-            return Account(id, owner, balance)
+            return Account(id, owner, balance, status)
         }
     }
     fun close() {
