@@ -79,4 +79,23 @@ class AccountRepository(
         return jdbcClient.sql("delete from accounts where id = :id").param("id", id).update() > 0
     }
     fun closeAccount(id: String) = jdbcClient.sql("update accounts set status = 'CLOSED' where id = :id").param("id", id).update()
+
+    fun findByIdsAndLock(first: String, second: String): List<Account> {
+        return jdbcClient.sql("""
+            select id, balance, owner, status from accounts
+            where id in (:first, :second)
+            order by id
+            for update
+        """.trimIndent()
+        ).param("first", first)
+            .param("second", second)
+            .query {rs, _ ->
+                Account.create(
+                    rs.getString("id"),
+                    rs.getString("owner"),
+                    rs.getLong("balance"),
+                    AccountStatus.valueOf(rs.getString("status"))
+                )
+            }.list()
+    }
 }

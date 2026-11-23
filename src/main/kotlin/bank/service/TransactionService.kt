@@ -132,19 +132,29 @@ class TransactionService(private val accountService: AccountService, private val
 
         return try {
             txTemplate.execute { status ->
-                val newSenderBalance = accountRepository.decreaseBalance(senderId, amount) ?: run {
-                    status.setRollbackOnly()
-                    val senderAccount = accountRepository.findById(senderId)
-                    return@execute if (senderAccount == null || senderAccount.status != AccountStatus.OPEN) AccountNotFound(senderId)
-                    else NotEnoughMoney(senderAccount.balance, amount)
-                }
-                accountRepository.increaseBalance(recipientId, amount) ?: run {
-                    status.setRollbackOnly()
-                    val recipientAccount = accountRepository.findById(recipientId)
-                    return@execute if (recipientAccount == null || recipientAccount.status != AccountStatus.OPEN) AccountNotFound(recipientId)
-                    else BalanceOverflow(amount, recipientId)
+                val lockedAccounts = accountRepository.findByIdsAndLock(senderId, recipientId).associateBy { it.id }
 
+                val senderAccount = lockedAccounts[senderId]
+                val recipientAccount = lockedAccounts[recipientId]
+                if (senderAccount == null || senderAccount.status != AccountStatus.OPEN) {
+                    status.setRollbackOnly()
+                    return@execute AccountNotFound(senderId)
                 }
+                if (recipientAccount == null || recipientAccount.status != AccountStatus.OPEN) {
+                    status.setRollbackOnly()
+                    return@execute AccountNotFound(recipientId)
+                }
+                if (amount > senderAccount.balance) {
+                    status.setRollbackOnly()
+                    return@execute NotEnoughMoney(senderAccount.balance, amount)
+                }
+                if (amount > Account.MAX_BALANCE - recipientAccount.balance) {
+                    status.setRollbackOnly()
+                    return@execute BalanceOverflow(amount, recipientId)
+                }
+                val newSenderBalance = accountRepository.decreaseBalance(senderId, amount) ?: error("Ошибка списания средств с счета $senderId")
+                accountRepository.increaseBalance(recipientId, amount) ?: error("Ошибка зачисления средств на счет $recipientId")
+
                 val tx = Transaction(
                     generateId(),
                     TransactionType.TRANSFER,
